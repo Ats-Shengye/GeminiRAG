@@ -1,6 +1,6 @@
 /**
  * Notion-Gemini統合システム - Notion API専用モジュール
- * 翼用カスタムRAGシステム
+ * カスタムRAGシステム
  */
 
 /**
