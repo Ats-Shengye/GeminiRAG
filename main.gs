@@ -1,6 +1,6 @@
 /**
  * Notion-Gemini統合システム - メイン統合ロジック（GAS完全対応版）
- * 翼用カスタムRAGシステム
+ * カスタムRAGシステム
  */
 
 /**
@@ -27,27 +27,29 @@ function searchNotionWithGemini(query, limit) {
     query = validatedParams.query;
     limit = validatedParams.limit;
     
-    // 3. Notion検索実行
-    Logger.info('Notion検索フェーズ開始');
-    var notionData = searchNotionPages(query, limit);
+    // 3. Notion本文検索実行（ハイブリッド方式）
+    Logger.info('Notion本文検索フェーズ開始');
+    var notionData = searchNotionPagesWithContent(query, limit, true);
     
     if (!notionData || notionData.length === 0) {
       Logger.info('検索結果なし');
       return createSuccessResponse(createNoDataResponse(), 'データなし');
     }
     
-    Logger.info('Notion検索完了', { 'found': notionData.length });
+    Logger.info('Notion本文検索完了', { 'found': notionData.length });
     
     // 4. Gemini要約実行
     Logger.info('Gemini要約フェーズ開始');
     var geminiResult = summarizeWithGemini(query, notionData);
     
-    // 5. レスポンス最終化
+    // 5. レスポンス最終化（ハイブリッド情報付き）
     var finalResult = {
       'summary': geminiResult.summary,
       'recent_records': geminiResult.recent_records,
       'older_records': geminiResult.older_records,
       'no_data': geminiResult.no_data,
+      'page_ids': notionData.map(function(item) { return item.id; }),
+      'scores': notionData.map(function(item) { return { 'id': item.id, 'score': item.score || 0 }; }),
       'metadata': {
         'query': query,
         'total_found': notionData.length,
@@ -144,6 +146,17 @@ function doGet(e) {
         result = testSystemStatus();
         break;
         
+      case 'searchNotionPagesWithContent':
+        var query = params.query;
+        var limit = params.limit ? parseInt(params.limit) : CONFIG.DEFAULT_LIMIT;
+        var searchContent = params.searchContent !== 'false'; // デフォルトtrue
+        result = searchNotionPagesWithContent(query, limit, searchContent);
+        break;
+        
+      case 'debugHybridSearch':
+        result = debugHybridSearchWeb();
+        break;
+        
       default:
         throw new Error('未対応の関数: ' + functionName);
     }
@@ -183,6 +196,14 @@ function doPost(e) {
         result = searchNotionWithGemini(
           requestData.query,
           requestData.limit || CONFIG.DEFAULT_LIMIT
+        );
+        break;
+        
+      case 'searchNotionPagesWithContent':
+        result = searchNotionPagesWithContent(
+          requestData.query,
+          requestData.limit || CONFIG.DEFAULT_LIMIT,
+          requestData.searchContent !== false  // デフォルトtrue
         );
         break;
         
@@ -271,6 +292,78 @@ function runManualTest() {
   console.log('検索結果:', testResult);
   
   console.log('=== テスト完了 ===');
+}
+
+/**
+ * ハイブリッド検索デバッグテスト
+ */
+function debugHybridSearch() {
+  console.log('=== ハイブリッド検索デバッグ ===');
+  
+  // 1. 本文検索テスト
+  console.log('1. 本文検索テスト');
+  var contentResults = searchNotionPagesWithContent('AIシテル', 3, true);
+  console.log('本文検索結果:', JSON.stringify(contentResults, null, 2));
+  
+  // 2. Geminiプロンプトテスト
+  if (contentResults.length > 0) {
+    console.log('2. Geminiプロンプトテスト');
+    var prompt = buildGeminiPrompt('AIシテル', contentResults);
+    console.log('Geminiプロンプト長さ:', prompt.length);
+    console.log('プロンプト抜粋:', prompt.slice(0, 500));
+  }
+  
+  console.log('=== デバッグ完了 ===');
+}
+
+/**
+ * Web API用ハイブリッド検索デバッグ
+ */
+function debugHybridSearchWeb() {
+  try {
+    var debugInfo = {
+      timestamp: new Date().toISOString(),
+      steps: []
+    };
+    
+    // 1. 本文検索テスト
+    debugInfo.steps.push('本文検索テスト開始');
+    var contentResults = searchNotionPagesWithContent('AIシテル', 3, true);
+    
+    debugInfo.contentResults = {
+      count: contentResults.length,
+      data: contentResults.map(function(item) {
+        return {
+          id: item.id,
+          title: item.title,
+          contentLength: item.content ? item.content.length : 0,
+          contentPreview: item.content ? item.content.slice(0, 100) : '',
+          score: item.score,
+          category: item.category,
+          tags: item.tags
+        };
+      })
+    };
+    
+    // 2. Geminiプロンプトテスト
+    if (contentResults.length > 0) {
+      debugInfo.steps.push('Geminiプロンプト生成テスト');
+      var prompt = buildGeminiPrompt('AIシテル', contentResults);
+      
+      debugInfo.geminiPrompt = {
+        length: prompt.length,
+        preview: prompt.slice(0, 500),
+        dataSection: prompt.includes('【データ】:') ? 'データセクションあり' : 'データセクションなし'
+      };
+    }
+    
+    debugInfo.steps.push('デバッグ完了');
+    
+    return createSuccessResponse(debugInfo, 'ハイブリッド検索デバッグ完了');
+    
+  } catch (error) {
+    return createErrorResponse('デバッグエラー: ' + error.message);
+  }
 }
 
 /**
