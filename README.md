@@ -41,9 +41,23 @@ NotionデータベースをGemini AIで要約・検索する統合システム�
 ## API仕様
 
 ### エンドポイント
+
+#### searchNotionWithGemini
+Notionデータベースを検索し、Geminiで要約
 ```
-GET /exec?function=searchNotionWithGemini&query={検索語}&limit={件数}
-POST /exec
+GET /exec?function=searchNotionWithGemini&query={検索語}&limit={件数}&token={認証トークン}
+```
+
+#### searchNotionPagesWithContent
+本文検索機能付きNotionページ検索（スコアリング付き）
+```
+GET /exec?function=searchNotionPagesWithContent&query={検索語}&limit={件数}&searchContent=true&token={認証トークン}
+```
+
+#### listRecentWithSummary
+指定期間内の重要ページをGeminiで要約
+```
+GET /exec?function=listRecentWithSummary&days_back={日数}&importance_filter={重要度}&max_pages={件数}&token={認証トークン}
 ```
 
 ### レスポンス例
@@ -89,8 +103,9 @@ POST /exec
 ### 2. API設定
 スクリプトプロパティで以下を設定:
 - `NOTION_TOKEN`: Notion統合APIトークン
-- `GEMINI_API_KEY`: Google AI Studio APIキー  
+- `GEMINI_API_KEY`: Google AI Studio APIキー
 - `DATABASE_ID`: NotionデータベースID
+- `API_AUTH_TOKEN`: API認証トークン（32文字以上、大小英字・数字・記号混在）
 
 ### 3. Notionデータベース構造
 必要プロパティ:
@@ -99,6 +114,17 @@ POST /exec
 - **重要度** (Select): 優先度
 - **タグ** (Rich Text): キーワード
 - **日時** (Date): 作成日時
+
+## セキュリティ
+
+- **APIキー保護**: ScriptPropertiesで管理、HTTPヘッダー送信（URLパラメータ不使用）
+- **API認証**: トークンベース認証、定数時間比較によるタイミング攻撃対策
+- **トークン強度検証**: 32文字以上、大小英字・数字・記号混在を要求
+- **Rate Limiting**: CacheServiceによるリクエスト頻度制限（10分間10リクエスト）
+- **入力検証**: クエリ長制限、制御文字・JSON構造文字の拒否
+- **エラー情報制限**: 内部実装詳細の外部露出防止
+- **ログ機密保護**: 検索クエリ・個人データをログに記録しない
+- **プロンプトインジェクション対策**: データエスケープ、セキュリティ指示による多層防御
 
 ## 技術的特徴
 

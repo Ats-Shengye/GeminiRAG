@@ -21,14 +21,14 @@ const CONFIG = {
   GEMINI_MODEL: 'gemini-2.5-pro',
   GEMINI_TEMPERATURE: 0.5,
   GEMINI_MAX_TOKENS: 2048,
-  
-  // リトライ設定
-  MAX_RETRIES: 3,
+
+  // リトライ設定（MEDIUM-02: 3→2回、BACKOFF 2→1.5）
+  MAX_RETRIES: 2,
   RETRY_DELAY_MS: 1000,
-  BACKOFF_MULTIPLIER: 2,
-  
-  // パフォーマンス設定
-  TIMEOUT_MS: 30000,
+  BACKOFF_MULTIPLIER: 1.5,
+
+  // パフォーマンス設定（MEDIUM-01: 30秒→10秒）
+  TIMEOUT_MS: 10000,
   RECENT_THRESHOLD_DAYS: 30
 };
 
@@ -38,11 +38,12 @@ const CONFIG = {
 function checkSystemConfig() {
   const required = ['NOTION_TOKEN', 'GEMINI_API_KEY', 'DATABASE_ID'];
   const missing = required.filter(key => !CONFIG[key]);
-  
+
   if (missing.length > 0) {
-    throw new Error(`設定不備: ${missing.join(', ')} が設定されていません`);
+    Logger.error('設定不備');
+    throw new Error('システム設定に不備があります。管理者に連絡してください');
   }
-  
+
   console.log('システム設定確認完了');
   return true;
 }
@@ -76,9 +77,10 @@ function executeWithRetry(func, maxRetries = CONFIG.MAX_RETRIES, context = '') {
       }
     }
   }
-  
-  // 全試行失敗
-  throw new Error(`${context}: ${maxRetries}回試行後も失敗: ${lastError.message}`);
+
+  // 全試行失敗（内部ログに詳細、外部には汎用メッセージ）
+  Logger.error('リトライ失敗');
+  throw new Error('処理に失敗しました。しばらく時間をおいて再試行してください');
 }
 
 /**
@@ -145,21 +147,22 @@ function getApiOptions(method = 'GET', payload = null, additionalHeaders = {}) {
 
 /**
  * ログ出力ユーティリティ
+ * MEDIUM-05: メタデータ削減（フェーズ名のみ記録）
  */
 const Logger = {
-  info: (message, data = null) => {
-    console.log(`[INFO] ${message}`, data || '');
+  info: (message) => {
+    console.log(`[INFO] ${message}`);
   },
-  
-  warn: (message, data = null) => {
-    console.warn(`[WARN] ${message}`, data || '');
+
+  warn: (message) => {
+    console.warn(`[WARN] ${message}`);
   },
-  
-  error: (message, error = null) => {
-    console.error(`[ERROR] ${message}`, error ? error.message : '');
+
+  error: (message) => {
+    console.error(`[ERROR] ${message}`);
   },
-  
-  debug: (message, data = null) => {
-    console.log(`[DEBUG] ${message}`, data || '');
+
+  debug: (message) => {
+    console.log(`[DEBUG] ${message}`);
   }
 };
